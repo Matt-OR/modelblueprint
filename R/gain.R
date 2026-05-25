@@ -1,0 +1,310 @@
+# =============================================================================
+# gain.R
+# Cumulative gains chart and Gini coefficient for ModelBlueprint objects.
+#
+# Design:
+#   - gain() is an S3 generic — works on data.frames directly or via
+#     gain.ModelBlueprint() which pulls slots automatically
+#   - No mutation of caller data — copies made internally
+#   - data.table used internally, never exposed in the return value
+#   - trapz() and helpers are @noRd internals
+# =============================================================================
+
+# =============================================================================
+# gain() — S3 generic
+# =============================================================================
+
+utils::globalVariables("perfect_model")
+
+#' Cumulative Gains Chart
+#'
+#' Plots cumulative gains curves for one or more competing scores against a
+#' perfect model baseline. The Gini coefficient for each score is shown in
+#' the legend.
+#'
+#' @param data A `data.frame`, `data.table`, or `ModelBlueprint`.
+#' @param ...  Arguments passed to methods.
+#' @export
+gain <- function(data, ...) UseMethod("gain")
+
+
+#' Cumulative Gains Chart (default method)
+#'
+#' @param data     A `data.frame` or `data.table`.
+#' @param pred     `[character]` Name(s) of competing score columns.
+#' @param obs      `[character(1)]` Name of the target variable column.
+#' @param exposure `[character(1)]` Name of the exposure column.
+#'                 Default `"exposure"`.
+#' @param title    `[character(1)]` Chart title.
+#' @param ret      `"plot"`, `"data"`, or `"gini"`. Default `"plot"`.
+#' @param ...      Unused.
+#'
+#' @return A plotly object, list of data.tables, or list of Gini values.
+#'
+#' @examples
+#' \dontrun{
+#' df <- data.frame(
+#'   obs      = c(0, 1, 0, 1, 1),
+#'   pred     = c(0.1, 0.9, 0.2, 0.8, 0.7),
+#'   exposure = rep(1, 5)
+#' )
+#' gain(df, pred = "pred", obs = "obs", exposure = "exposure")
+#' }
+#' @method gain default
+#' @export
+gain.default <- function(
+  data,
+  pred = "predict",
+  obs = NA_character_,
+  exposure = "exposure",
+  title = "Cumulative Gains",
+  ret = c("plot", "data", "gini"),
+  ...
+) {
+  ret <- match.arg(ret)
+
+  # Defensive copy — never mutate caller data
+  dt <- data.table::as.data.table(data)
+
+  # Perfect model baseline — add before column selection so it's available
+  dt[, perfect_model := .SD[[1L]], .SDcols = obs]
+
+  # Keep only needed columns (including perfect_model)
+  dt <- dt[, c(obs, pred, exposure, "perfect_model"), with = FALSE]
+  perfect <- compute_cumulative(dt, "perfect_model", obs, exposure)
+  list_sets <- list(perfect$data)
+  list_gini <- list(perfect$gini)
+
+  # One entry per competing score
+  for (score in pred) {
+    result <- compute_cumulative(dt, score, obs, exposure)
+    list_sets <- c(list_sets, list(result$data))
+    list_gini <- c(list_gini, list(result$gini))
+  }
+
+  switch(
+    ret,
+    plot = plot_gain(list_sets, pred, title, list_gini),
+    data = list_sets,
+    gini = list_gini
+  )
+}
+
+
+#' @rdname gain
+#' @method gain ModelBlueprint
+#'
+#' @param data  A `ModelBlueprint` object.
+#' @param set   Which dataset to use: `"train"`, `"test"`, or `"holdout"`.
+#' @param title Chart title. Defaults to `model_display_name`.
+#' @param ret   `"plot"`, `"data"`, or `"gini"`. Default `"plot"`.
+#' @param ...   Passed to the default method.
+#'
+#' @return A plotly object, list of data.tables, or list of Gini values.
+#'
+#' @examples
+#' \dontrun{
+#' mb <- ModelBlueprint(
+#'   model  = glm(vs ~ wt + hp, data = mtcars, family = binomial),
+#'   train  = mtcars,
+#'   y_name = "vs",
+#'   model_display_name = "logistic_vs"
+#' )
+#' gain(mb)
+#' }
+#' @export
+gain.ModelBlueprint <- function(
+  data,
+  set = c("train", "test", "holdout"),
+  title = NULL,
+  ret = c("plot", "data", "gini"),
+  ...
+) {
+  set <- match.arg(set)
+  ret <- match.arg(ret)
+
+  df <- prop(data, set)
+  if (is.null(df)) {
+    stop(
+      sprintf(
+        "ModelBlueprint `@%s` is NULL. Supply data when constructing the object.",
+        set
+      ),
+      call. = FALSE
+    )
+  }
+
+  if (is.na(data@y_name)) {
+    stop(
+      "ModelBlueprint `@y_name` is not set.",
+      call. = FALSE
+    )
+  }
+
+  # Resolve exposure — fall back to unit weights
+  exposure <- resolve_exposure(data, df)
+  df <- as.data.frame(df)
+  if (exposure == "vec_of_ones") {
+    df[[".exposure_ones"]] <- 1L
+    exposure <- ".exposure_ones"
+  }
+
+  # Attach in-sample predictions — copy already made above via as.data.frame
+  pred_col <- if (!is.na(data@model_display_name)) {
+    data@model_display_name
+  } else {
+    "model_pred"
+  }
+  df[[pred_col]] <- predict.ModelBlueprint(data, df)
+
+  chart_title <- title %||% pred_col
+
+  gain.default(
+    df,
+    pred = pred_col,
+    obs = data@y_name,
+    exposure = exposure,
+    title = chart_title,
+    ret = ret,
+    ...
+  )
+}
+
+# Register package-qualified S7 class name so UseMethod() dispatches correctly
+`gain.ModelBlueprint::ModelBlueprint` <- gain.ModelBlueprint
+
+
+# =============================================================================
+# Internal: compute_cumulative
+# =============================================================================
+
+#' @keywords internal
+#' @noRd
+compute_cumulative <- function(dt, variable, obs, exposure) {
+  set <- data.table::copy(dt)
+
+  # Sort descending by score per unit exposure
+  ord <- order(-(set[[variable]] / set[[exposure]]))
+  set <- set[ord]
+
+  cum_obs <- paste0("cum_", obs)
+  cum_variable <- paste0("cum_", variable)
+  cum_exposure <- paste0("cum_", exposure)
+
+  set[, (cum_obs) := cumsum(.SD[[1L]]), .SDcols = obs]
+  set[, (cum_variable) := cumsum(.SD[[1L]]), .SDcols = variable]
+  set[, (cum_exposure) := cumsum(.SD[[1L]]), .SDcols = exposure]
+
+  # Compute totals outside data.table j-expressions to avoid scope issues
+  total_obs <- sum(dt[[obs]], na.rm = TRUE)
+  total_variable <- sum(dt[[variable]], na.rm = TRUE)
+  total_exposure <- sum(dt[[exposure]], na.rm = TRUE)
+
+  # Normalise to [0, 1]
+  set[, (cum_obs) := .SD[[1L]] / total_obs, .SDcols = cum_obs]
+  set[, (cum_variable) := .SD[[1L]] / total_variable, .SDcols = cum_variable]
+  set[, (cum_exposure) := .SD[[1L]] / total_exposure, .SDcols = cum_exposure]
+
+  # Gini via trapezoidal integration
+  auc <- trapz(as.numeric(set[[cum_exposure]]), as.numeric(set[[cum_obs]]))
+  gini <- (auc - 0.5) * 2
+
+  # Align cum_variable to the obs curve for plotting
+  set[, (cum_variable) := .SD[[1L]], .SDcols = cum_obs]
+
+  keep <- c(cum_exposure, cum_variable)
+  list(data = set[, .SD, .SDcols = keep], gini = gini, auc = auc)
+}
+
+
+# =============================================================================
+# Internal: plot_gain
+# =============================================================================
+
+#' @keywords internal
+#' @noRd
+plot_gain <- function(list_sets, scores, title, list_gini) {
+  n <- length(scores)
+  colors <- c(
+    "rgb(0,0,0)",
+    "rgb(237,41,57)",
+    RColorBrewer::brewer.pal(max(3L, n), "Paired")
+  )[seq_len(n + 1L)]
+
+  p <- plotly::plot_ly()
+  p <- plotly::layout(
+    p,
+    title = title,
+    xaxis = list(title = "Cumulative % of Exposure", rangemode = "tozero"),
+    yaxis = list(
+      title = "Cumulative % of Target",
+      rangemode = "tozero",
+      showgrid = FALSE
+    ),
+    legend = list(x = 1.05, y = 0.5),
+    margin = list(t = 25, b = 100, l = 50, r = 50)
+  )
+
+  # Diagonal reference line (mean model)
+  ref <- list_sets[[1L]]
+  x_col <- names(ref)[1L]
+  p <- plotly::add_lines(
+    p,
+    x = ref[[x_col]],
+    y = ref[[x_col]],
+    name = "Mean model, Gini: 0.000",
+    line = list(color = colors[1L], dash = "dash")
+  )
+
+  # One line per score — list_sets[[1]] is perfect model, [[2]] onward are scores
+  # scores here contains only the user-supplied pred names (not perfect_model)
+  for (i in seq_along(scores)) {
+    s <- list_sets[[i + 1L]]
+    x_col <- names(s)[1L]
+    y_col <- names(s)[2L]
+    gini_i <- as.numeric(list_gini[[i + 1L]])
+    p <- plotly::add_lines(
+      p,
+      x = s[[x_col]],
+      y = s[[y_col]],
+      name = sprintf("%s, Gini: %.3f", scores[i], gini_i),
+      line = list(color = colors[i + 1L])
+    )
+  }
+
+  p
+}
+
+
+# =============================================================================
+# Internal: trapz
+# =============================================================================
+
+#' @keywords internal
+#' @noRd
+trapz <- function(x, y) {
+  if (missing(y)) {
+    if (length(x) == 0L) {
+      return(0)
+    }
+    y <- x
+    x <- seq_along(x)
+  }
+  if (length(x) == 0L && length(y) == 0L) {
+    return(0)
+  }
+  if (
+    !(is.numeric(x) || is.complex(x)) ||
+      !(is.numeric(y) || is.complex(y))
+  ) {
+    stop("`x` and `y` must be numeric or complex vectors.", call. = FALSE)
+  }
+  m <- length(x)
+  if (length(y) != m) {
+    stop("`x` and `y` must be the same length.", call. = FALSE)
+  }
+  if (m <= 1L) {
+    return(0)
+  }
+  sum(diff(x) * (y[-m] + y[-1L])) / 2
+}

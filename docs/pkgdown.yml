@@ -1,0 +1,12 @@
+pandoc: 3.8.3
+pkgdown: 2.2.0
+pkgdown_sha: ~
+articles:
+  getting-started: getting-started.html
+  model-diagnostics: model-diagnostics.html
+  one-way-plots: one-way-plots.html
+  partial-dependence-plots: partial-dependence-plots.html
+last_built: 2026-05-25T16:38Z
+urls:
+  reference: https://github.com/matt/ModelBlueprint/reference
+  article: https://github.com/matt/ModelBlueprint/articles

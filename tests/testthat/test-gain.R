@@ -1,0 +1,518 @@
+# =============================================================================
+# test-gain.R
+# Tests for gain(), gain.default(), gain.ModelBlueprint(), and internals.
+#
+# Conventions:
+#   - One describe() block per function/behaviour group
+#   - One it() per behaviour
+#   - All expect_error() use fixed = TRUE
+#   - Fixtures defined once per describe() block
+# =============================================================================
+
+library(testthat)
+library(ModelBlueprint)
+
+
+# =============================================================================
+# Shared fixtures
+# =============================================================================
+
+# Small deterministic dataset with a clear signal
+make_gain_df <- function(n = 200L, seed = 42L) {
+  set.seed(seed)
+  data.frame(
+    obs = sample(0L:1L, n, replace = TRUE),
+    pred = runif(n),
+    exposure = rep(1, n),
+    stringsAsFactors = FALSE
+  )
+}
+
+# Perfect model — pred == obs, should give Gini near 1
+make_perfect_df <- function(n = 200L) {
+  data.frame(
+    obs = c(rep(0L, n / 2L), rep(1L, n / 2L)),
+    pred = c(rep(0, n / 2L), rep(1, n / 2L)),
+    exposure = rep(1, n)
+  )
+}
+
+# Random model — pred unrelated to obs, Gini near 0
+make_random_df <- function(n = 1000L, seed = 1L) {
+  set.seed(seed)
+  data.frame(
+    obs = sample(0L:1L, n, replace = TRUE),
+    pred = runif(n),
+    exposure = rep(1, n)
+  )
+}
+
+make_mb <- function() {
+  ModelBlueprint(
+    model = stats::glm(vs ~ wt + hp, data = mtcars, family = binomial),
+    train = mtcars,
+    test = mtcars[1:16, ],
+    y_name = "vs",
+    expo_name = "exposure", # not in mtcars — falls back to ones
+    model_display_name = "logistic_vs"
+  )
+}
+
+is_plotly <- function(x) inherits(x, "plotly")
+
+
+# =============================================================================
+# gain.default — return type
+# =============================================================================
+
+describe("gain.default — return type", {
+  df <- make_gain_df()
+
+  it("returns a plotly object by default", {
+    expect_true(is_plotly(gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure"
+    )))
+  })
+
+  it("ret = 'plot' returns plotly", {
+    expect_true(is_plotly(gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "plot"
+    )))
+  })
+
+  it("ret = 'data' returns a list", {
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_true(is.list(result))
+  })
+
+  it("ret = 'data' list has length 2 (perfect + 1 score)", {
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_length(result, 2L)
+  })
+
+  it("ret = 'gini' returns a list of numeric values", {
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "gini"
+    )
+    expect_true(is.list(result))
+    expect_true(all(vapply(result, is.numeric, logical(1L))))
+  })
+
+  it("ret = 'data' elements are data.tables", {
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_true(all(vapply(result, data.table::is.data.table, logical(1L))))
+  })
+
+  it("invalid ret errors", {
+    expect_error(
+      gain(
+        df,
+        pred = "pred",
+        obs = "obs",
+        exposure = "exposure",
+        ret = "banana"
+      ),
+      "should be one of",
+      fixed = TRUE
+    )
+  })
+})
+
+
+# =============================================================================
+# gain.default — multiple scores
+# =============================================================================
+
+describe("gain.default — multiple scores", {
+  df <- make_gain_df()
+  df$pred2 <- runif(nrow(df))
+
+  it("accepts a vector of pred column names", {
+    expect_true(is_plotly(
+      gain(df, pred = c("pred", "pred2"), obs = "obs", exposure = "exposure")
+    ))
+  })
+
+  it("ret = 'data' has length n_scores + 1 (perfect model)", {
+    result <- gain(
+      df,
+      pred = c("pred", "pred2"),
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_length(result, 3L) # perfect + pred + pred2
+  })
+
+  it("ret = 'gini' returns one gini per score plus perfect", {
+    result <- gain(
+      df,
+      pred = c("pred", "pred2"),
+      obs = "obs",
+      exposure = "exposure",
+      ret = "gini"
+    )
+    expect_length(result, 3L)
+  })
+})
+
+
+# =============================================================================
+# gain.default — Gini statistical properties
+# =============================================================================
+
+describe("gain.default — Gini statistical properties", {
+  it("perfect model has Gini close to 1", {
+    df <- make_perfect_df()
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "gini"
+    )
+    # result[[1]] is perfect model (Gini = 0 baseline), result[[2]] is our pred
+    gini <- as.numeric(result[[2L]])
+    expect_gt(gini, 0.45)
+  })
+
+  it("random model has Gini close to 0", {
+    df <- make_random_df()
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "gini"
+    )
+    gini <- abs(as.numeric(result[[2L]]))
+    expect_lt(gini, 0.15)
+  })
+
+  it("Gini values are in [-1, 1]", {
+    df <- make_gain_df()
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "gini"
+    )
+    ginis <- as.numeric(unlist(result))
+    expect_true(all(ginis >= -1 & ginis <= 1))
+  })
+})
+
+
+# =============================================================================
+# gain.default — immutability
+# =============================================================================
+
+describe("gain.default — immutability", {
+  it("does not modify caller's data.frame", {
+    df <- make_gain_df()
+    cols_before <- names(df)
+    nrow_before <- nrow(df)
+    gain(df, pred = "pred", obs = "obs", exposure = "exposure")
+    expect_equal(names(df), cols_before)
+    expect_equal(nrow(df), nrow_before)
+  })
+
+  it("does not modify caller's data.table", {
+    dt <- data.table::as.data.table(make_gain_df())
+    cols_before <- names(dt)
+    gain(dt, pred = "pred", obs = "obs", exposure = "exposure")
+    expect_equal(names(dt), cols_before)
+  })
+})
+
+
+# =============================================================================
+# gain.default — data structure
+# =============================================================================
+
+describe("gain.default — returned data structure", {
+  it("each data.table has two columns (cum_exposure, cum_score)", {
+    df <- make_gain_df()
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    for (d in result) {
+      expect_equal(ncol(d), 2L)
+    }
+  })
+
+  it("cumulative values are in [0, 1]", {
+    df <- make_gain_df()
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    for (d in result) {
+      expect_true(all(unlist(d) >= 0 & unlist(d) <= 1 + 1e-9))
+    }
+  })
+
+  it("cumulative exposure ends at 1", {
+    df <- make_gain_df()
+    result <- gain(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    for (d in result) {
+      expect_equal(max(d[[1L]]), 1, tolerance = 1e-6)
+    }
+  })
+})
+
+
+# =============================================================================
+# gain.ModelBlueprint
+# =============================================================================
+
+describe("gain.ModelBlueprint — return type", {
+  mb <- make_mb()
+
+  it("returns a plotly object by default", {
+    expect_true(is_plotly(gain(mb)))
+  })
+
+  it("ret = 'data' returns a list", {
+    result <- gain(mb, ret = "data")
+    expect_true(is.list(result))
+  })
+
+  it("ret = 'gini' returns a list of numerics", {
+    result <- gain(mb, ret = "gini")
+    expect_true(is.list(result))
+    expect_true(all(vapply(result, is.numeric, logical(1L))))
+  })
+})
+
+
+describe("gain.ModelBlueprint — slot usage", {
+  mb <- make_mb()
+
+  it("uses y_name from blueprint", {
+    # Should not error — y_name = 'vs' exists in mtcars
+    expect_no_error(gain(mb))
+  })
+
+  it("uses model_display_name as legend label (no error)", {
+    expect_no_error(gain(mb, ret = "plot"))
+  })
+
+  it("falls back to unit weights when expo_name not in data", {
+    # expo_name = "exposure" but mtcars has no such column
+    expect_no_error(gain(mb, ret = "data"))
+  })
+})
+
+
+describe("gain.ModelBlueprint — set argument", {
+  mb <- make_mb()
+
+  it("uses train by default", {
+    expect_no_error(gain(mb, set = "train"))
+  })
+
+  it("uses test dataset when set = 'test'", {
+    expect_no_error(gain(mb, set = "test"))
+  })
+
+  it("errors informatively when chosen set is NULL", {
+    mb_no_data <- ModelBlueprint(
+      model = stats::lm(mpg ~ wt, data = mtcars),
+      y_name = "mpg"
+    )
+    expect_error(
+      gain(mb_no_data),
+      "ModelBlueprint `@train` is NULL.",
+      fixed = TRUE
+    )
+  })
+
+  it("errors when y_name is not set", {
+    mb_no_y <- ModelBlueprint(
+      model = stats::lm(mpg ~ wt, data = mtcars),
+      train = mtcars
+    )
+    expect_error(
+      gain(mb_no_y),
+      "ModelBlueprint `@y_name` is not set.",
+      fixed = TRUE
+    )
+  })
+})
+
+
+describe("gain.ModelBlueprint — title argument", {
+  mb <- make_mb()
+
+  it("accepts a custom title without error", {
+    expect_no_error(gain(mb, title = "My custom title"))
+  })
+
+  it("defaults to model_display_name when title is NULL", {
+    expect_no_error(gain(mb, title = NULL))
+  })
+})
+
+
+# =============================================================================
+# trapz — unit tests
+# =============================================================================
+
+describe("trapz", {
+  it("integrates a constant function (area = base * height)", {
+    x <- seq(0, 1, length.out = 100L)
+    y <- rep(2, 100L)
+    expect_equal(ModelBlueprint:::trapz(x, y), 2, tolerance = 1e-6)
+  })
+
+  it("integrates a linear function exactly", {
+    x <- c(0, 1, 2)
+    y <- c(0, 1, 2) # area under y = x from 0 to 2 = 2
+    expect_equal(ModelBlueprint:::trapz(x, y), 2, tolerance = 1e-6)
+  })
+
+  it("approximates integral of sin(x) from 0 to pi", {
+    x <- seq(0, pi, length.out = 1000L)
+    y <- sin(x)
+    expect_equal(ModelBlueprint:::trapz(x, y), 2, tolerance = 1e-4)
+  })
+
+  it("returns 0 for empty input", {
+    expect_equal(ModelBlueprint:::trapz(numeric(0)), 0)
+  })
+
+  it("returns 0 for a single point", {
+    expect_equal(ModelBlueprint:::trapz(1, 1), 0)
+  })
+
+  it("errors when x and y have different lengths", {
+    expect_error(
+      ModelBlueprint:::trapz(1:3, 1:4),
+      "`x` and `y` must be the same length.",
+      fixed = TRUE
+    )
+  })
+
+  it("errors when inputs are not numeric", {
+    expect_error(
+      ModelBlueprint:::trapz("a", "b"),
+      "must be numeric or complex vectors.",
+      fixed = TRUE
+    )
+  })
+
+  it("handles single-argument form (treats x as y)", {
+    # trapz(y) with x = seq_along(y)
+    result <- ModelBlueprint:::trapz(c(0, 1, 2))
+    expect_equal(result, 2, tolerance = 1e-6)
+  })
+})
+
+
+# =============================================================================
+# compute_cumulative — unit tests
+# =============================================================================
+
+describe("compute_cumulative", {
+  # Helper: build a data.table with perfect_model column without using :=
+  make_cumulative_dt <- function() {
+    data.table::data.table(
+      obs = c(1, 0, 1, 0),
+      pred = c(0.9, 0.1, 0.8, 0.2),
+      exposure = 1,
+      perfect_model = c(1, 0, 1, 0)
+    )
+  }
+
+  it("returns a list with data, gini, and auc elements", {
+    result <- ModelBlueprint:::compute_cumulative(
+      make_cumulative_dt(),
+      "pred",
+      "obs",
+      "exposure"
+    )
+    expect_true(all(c("data", "gini", "auc") %in% names(result)))
+  })
+
+  it("returned data has exactly 2 columns", {
+    result <- ModelBlueprint:::compute_cumulative(
+      make_cumulative_dt(),
+      "pred",
+      "obs",
+      "exposure"
+    )
+    expect_equal(ncol(result$data), 2L)
+  })
+
+  it("cumulative exposure ends at 1", {
+    result <- ModelBlueprint:::compute_cumulative(
+      make_cumulative_dt(),
+      "pred",
+      "obs",
+      "exposure"
+    )
+    expect_equal(max(result$data[[1L]]), 1, tolerance = 1e-6)
+  })
+
+  it("gini is numeric scalar", {
+    result <- ModelBlueprint:::compute_cumulative(
+      make_cumulative_dt(),
+      "pred",
+      "obs",
+      "exposure"
+    )
+    expect_true(is.numeric(result$gini))
+    expect_length(result$gini, 1L)
+  })
+
+  it("does not mutate the input data.table", {
+    dt <- make_cumulative_dt()
+    cols_before <- names(dt)
+    ModelBlueprint:::compute_cumulative(dt, "pred", "obs", "exposure")
+    expect_equal(names(dt), cols_before)
+  })
+})

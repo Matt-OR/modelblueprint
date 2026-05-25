@@ -1,0 +1,516 @@
+# =============================================================================
+# test-pred-vs-obs.R
+# Tests for pred_vs_obs(), pred_vs_obs.default(), pred_vs_obs.ModelBlueprint()
+#
+# Conventions:
+#   - One describe() block per behaviour group
+#   - One it() per behaviour
+#   - All expect_error() use fixed = TRUE
+#   - Fixtures defined once per describe() block
+# =============================================================================
+
+library(testthat)
+library(ModelBlueprint)
+
+
+# =============================================================================
+# Shared fixtures
+# =============================================================================
+
+make_df <- function(n = 200L, seed = 42L) {
+  set.seed(seed)
+  data.frame(
+    obs = rbinom(n, 1L, 0.3),
+    pred = runif(n, 0, 0.5),
+    exposure = rep(1, n),
+    stringsAsFactors = FALSE
+  )
+}
+
+make_df_with_expo <- function(n = 200L, seed = 42L) {
+  set.seed(seed)
+  data.frame(
+    obs = rbinom(n, 1L, 0.3),
+    pred = runif(n, 0, 0.5),
+    exposure = runif(n, 0.5, 2),
+    stringsAsFactors = FALSE
+  )
+}
+
+make_mb <- function() {
+  ModelBlueprint(
+    model = stats::glm(vs ~ wt + hp, data = mtcars, family = binomial),
+    train = mtcars,
+    test = mtcars[1:16, ],
+    y_name = "vs",
+    expo_name = "exposure", # not in mtcars — falls back to ones
+    model_display_name = "logistic_vs"
+  )
+}
+
+is_plotly <- function(x) inherits(x, "plotly")
+
+
+# =============================================================================
+# pred_vs_obs.default — return type
+# =============================================================================
+
+describe("pred_vs_obs.default — return type", {
+  df <- make_df()
+
+  it("returns a plotly object by default", {
+    expect_true(is_plotly(
+      pred_vs_obs(df, pred = "pred", obs = "obs", exposure = "exposure")
+    ))
+  })
+
+  it("ret = 'plot' returns plotly", {
+    expect_true(is_plotly(
+      pred_vs_obs(
+        df,
+        pred = "pred",
+        obs = "obs",
+        exposure = "exposure",
+        ret = "plot"
+      )
+    ))
+  })
+
+  it("ret = 'data' returns a data.table", {
+    result <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_true(data.table::is.data.table(result))
+  })
+
+  it("invalid ret errors", {
+    expect_error(
+      pred_vs_obs(
+        df,
+        pred = "pred",
+        obs = "obs",
+        exposure = "exposure",
+        ret = "banana"
+      ),
+      "should be one of",
+      fixed = TRUE
+    )
+  })
+
+  it("invalid type_agg errors", {
+    expect_error(
+      pred_vs_obs(
+        df,
+        pred = "pred",
+        obs = "obs",
+        exposure = "exposure",
+        type_agg = "equal_banana"
+      ),
+      "should be one of",
+      fixed = TRUE
+    )
+  })
+})
+
+
+# =============================================================================
+# pred_vs_obs.default — returned data structure
+# =============================================================================
+
+describe("pred_vs_obs.default — returned data structure", {
+  df <- make_df()
+
+  it("has expected columns: .bin, obs_mean, pred_mean, var_mean, exposure", {
+    result <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_true(all(
+      c(".bin", "obs_mean", "pred_mean", "var_mean", "exposure") %in%
+        names(result)
+    ))
+  })
+
+  it("has at most bins rows", {
+    result <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      bins = 5L,
+      ret = "data"
+    )
+    expect_lte(nrow(result), 5L)
+  })
+
+  it("obs_mean values are non-negative", {
+    result <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_true(all(result$obs_mean >= 0, na.rm = TRUE))
+  })
+
+  it("pred_mean values are non-negative", {
+    result <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_true(all(result$pred_mean >= 0, na.rm = TRUE))
+  })
+
+  it("exposure sums to total exposure in data", {
+    result <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_equal(sum(result$exposure), nrow(df), tolerance = 1e-6)
+  })
+
+  it("exposure sums correctly with non-unit exposure", {
+    df_expo <- make_df_with_expo()
+    result <- pred_vs_obs(
+      df_expo,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      ret = "data"
+    )
+    expect_equal(sum(result$exposure), sum(df_expo$exposure), tolerance = 1e-6)
+  })
+})
+
+
+# =============================================================================
+# pred_vs_obs.default — bins argument
+# =============================================================================
+
+describe("pred_vs_obs.default — bins argument", {
+  df <- make_df()
+
+  it("fewer bins produces fewer rows", {
+    d5 <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      bins = 5L,
+      ret = "data"
+    )
+    d10 <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      bins = 10L,
+      ret = "data"
+    )
+    expect_lte(nrow(d5), nrow(d10))
+  })
+
+  it("bins = 2 does not error", {
+    expect_no_error(
+      pred_vs_obs(
+        df,
+        pred = "pred",
+        obs = "obs",
+        exposure = "exposure",
+        bins = 2L
+      )
+    )
+  })
+
+  it("large bins value still returns a plot", {
+    expect_true(is_plotly(
+      pred_vs_obs(
+        df,
+        pred = "pred",
+        obs = "obs",
+        exposure = "exposure",
+        bins = 50L
+      )
+    ))
+  })
+})
+
+
+# =============================================================================
+# pred_vs_obs.default — type_agg
+# =============================================================================
+
+describe("pred_vs_obs.default — type_agg", {
+  df <- make_df()
+
+  it("equal_exposure returns a plotly object", {
+    expect_true(is_plotly(
+      pred_vs_obs(
+        df,
+        pred = "pred",
+        obs = "obs",
+        exposure = "exposure",
+        type_agg = "equal_exposure"
+      )
+    ))
+  })
+
+  it("equal_range returns a plotly object", {
+    expect_true(is_plotly(
+      pred_vs_obs(
+        df,
+        pred = "pred",
+        obs = "obs",
+        exposure = "exposure",
+        type_agg = "equal_range"
+      )
+    ))
+  })
+
+  it("equal_exposure bins have more balanced exposure than equal_range", {
+    d_ee <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      bins = 8L,
+      type_agg = "equal_exposure",
+      ret = "data"
+    )
+    d_er <- pred_vs_obs(
+      df,
+      pred = "pred",
+      obs = "obs",
+      exposure = "exposure",
+      bins = 8L,
+      type_agg = "equal_range",
+      ret = "data"
+    )
+    cv <- function(x) stats::sd(x) / mean(x)
+    expect_lt(cv(d_ee$exposure), cv(d_er$exposure))
+  })
+})
+
+
+# =============================================================================
+# pred_vs_obs.default — immutability
+# =============================================================================
+
+describe("pred_vs_obs.default — immutability", {
+  it("does not modify caller's data.frame", {
+    df <- make_df()
+    cols_before <- names(df)
+    pred_vs_obs(df, pred = "pred", obs = "obs", exposure = "exposure")
+    expect_equal(names(df), cols_before)
+  })
+
+  it("does not modify caller's data.table", {
+    dt <- data.table::as.data.table(make_df())
+    cols_before <- names(dt)
+    pred_vs_obs(dt, pred = "pred", obs = "obs", exposure = "exposure")
+    expect_equal(names(dt), cols_before)
+  })
+})
+
+
+# =============================================================================
+# pred_vs_obs.ModelBlueprint — return type
+# =============================================================================
+
+describe("pred_vs_obs.ModelBlueprint — return type", {
+  mb <- make_mb()
+
+  it("returns a plotly object by default", {
+    expect_true(is_plotly(pred_vs_obs(mb)))
+  })
+
+  it("ret = 'data' returns a data.table", {
+    result <- pred_vs_obs(mb, ret = "data")
+    expect_true(data.table::is.data.table(result))
+  })
+})
+
+
+# =============================================================================
+# pred_vs_obs.ModelBlueprint — slot usage
+# =============================================================================
+
+describe("pred_vs_obs.ModelBlueprint — slot usage", {
+  it("uses y_name from blueprint", {
+    mb <- make_mb()
+    expect_no_error(pred_vs_obs(mb))
+  })
+
+  it("uses model to generate predictions", {
+    mb <- make_mb()
+    result <- pred_vs_obs(mb, ret = "data")
+    expect_false(any(is.na(result$pred_mean)))
+  })
+
+  it("falls back to unit weights when expo_name not in data", {
+    mb <- make_mb() # expo_name = "exposure" but mtcars has no such col
+    result <- pred_vs_obs(mb, ret = "data")
+    expect_equal(sum(result$exposure), nrow(mb@train))
+  })
+
+  it("uses real exposure when expo_name column exists", {
+    df <- mtcars
+    set.seed(1L)
+    df$expo <- runif(nrow(df), 0.5, 2)
+    mb_expo <- ModelBlueprint(
+      model = stats::glm(vs ~ wt + hp, data = df, family = binomial),
+      train = df,
+      y_name = "vs",
+      expo_name = "expo",
+      model_display_name = "logistic_vs_expo"
+    )
+    result <- pred_vs_obs(mb_expo, ret = "data")
+    expect_false(isTRUE(all.equal(sum(result$exposure), nrow(df))))
+  })
+})
+
+
+# =============================================================================
+# pred_vs_obs.ModelBlueprint — set argument
+# =============================================================================
+
+describe("pred_vs_obs.ModelBlueprint — set argument", {
+  mb <- make_mb()
+
+  it("uses train by default", {
+    expect_no_error(pred_vs_obs(mb, set = "train"))
+  })
+
+  it("uses test dataset when set = 'test'", {
+    expect_no_error(pred_vs_obs(mb, set = "test"))
+  })
+
+  it("errors informatively when chosen set is NULL", {
+    mb_no_data <- ModelBlueprint(
+      model = stats::lm(mpg ~ wt, data = mtcars),
+      y_name = "mpg"
+    )
+    expect_error(
+      pred_vs_obs(mb_no_data),
+      "ModelBlueprint `@train` is NULL.",
+      fixed = TRUE
+    )
+  })
+
+  it("errors when y_name is not set", {
+    mb_no_y <- ModelBlueprint(
+      model = stats::lm(mpg ~ wt, data = mtcars),
+      train = mtcars
+    )
+    expect_error(
+      pred_vs_obs(mb_no_y),
+      "ModelBlueprint `@y_name` is not set.",
+      fixed = TRUE
+    )
+  })
+})
+
+
+# =============================================================================
+# pred_vs_obs.ModelBlueprint — passthrough arguments
+# =============================================================================
+
+describe("pred_vs_obs.ModelBlueprint — passthrough arguments", {
+  mb <- make_mb()
+
+  it("bins argument is respected", {
+    d5 <- pred_vs_obs(mb, bins = 5L, ret = "data")
+    d10 <- pred_vs_obs(mb, bins = 10L, ret = "data")
+    expect_lte(nrow(d5), nrow(d10))
+  })
+
+  it("type_agg = 'equal_range' returns a plot", {
+    expect_true(is_plotly(pred_vs_obs(mb, type_agg = "equal_range")))
+  })
+
+  it("custom title does not error", {
+    expect_no_error(pred_vs_obs(mb, title = "My calibration chart"))
+  })
+})
+
+
+# =============================================================================
+# bin_pred — unit tests
+# =============================================================================
+
+describe("bin_pred", {
+  it("returns a factor", {
+    x <- runif(100L)
+    result <- ModelBlueprint:::bin_pred(x, 10L, "equal_exposure")
+    expect_true(is.factor(result))
+  })
+
+  it("equal_exposure — number of levels <= bins", {
+    x <- runif(200L)
+    result <- ModelBlueprint:::bin_pred(x, 10L, "equal_exposure")
+    expect_lte(nlevels(result), 10L)
+  })
+
+  it("equal_range — number of levels <= bins", {
+    x <- runif(200L)
+    result <- ModelBlueprint:::bin_pred(x, 10L, "equal_range")
+    expect_lte(nlevels(result), 10L)
+  })
+
+  it("equal_exposure — bins have more balanced counts than equal_range", {
+    set.seed(1L)
+    x <- c(runif(180L, 0, 0.1), runif(20L, 0.9, 1)) # skewed distribution
+    b_ee <- ModelBlueprint:::bin_pred(x, 5L, "equal_exposure")
+    b_er <- ModelBlueprint:::bin_pred(x, 5L, "equal_range")
+    cv <- function(b) {
+      counts <- as.numeric(table(b))
+      stats::sd(counts) / mean(counts)
+    }
+    expect_lt(cv(b_ee), cv(b_er))
+  })
+
+  it("no NAs in output for clean input", {
+    x <- seq(0.01, 1, length.out = 100L)
+    result <- ModelBlueprint:::bin_pred(x, 5L, "equal_exposure")
+    expect_false(any(is.na(result)))
+  })
+})
+
+
+# =============================================================================
+# make_interval_labels — unit tests
+# =============================================================================
+
+describe("make_interval_labels", {
+  it("returns n labels for n+1 breaks", {
+    breaks <- c(0, 0.25, 0.5, 0.75, 1)
+    labels <- ModelBlueprint:::make_interval_labels(breaks)
+    expect_length(labels, 4L)
+  })
+
+  it("labels are character strings", {
+    breaks <- c(0, 0.5, 1)
+    labels <- ModelBlueprint:::make_interval_labels(breaks)
+    expect_type(labels, "character")
+  })
+
+  it("labels contain parentheses and brackets", {
+    breaks <- c(0, 0.5, 1)
+    labels <- ModelBlueprint:::make_interval_labels(breaks)
+    expect_true(all(grepl("^\\(.*\\]$", labels)))
+  })
+})
