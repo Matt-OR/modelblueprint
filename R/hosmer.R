@@ -253,7 +253,7 @@ plot_pred_vs_obs <- function(agg, obs, title) {
     x = x_labels,
     y = agg$exposure,
     name = "Exposure",
-    marker = list(color = "rgba(255,211,0,0.6)"),
+    marker = list(color = "#ffff00"),
     yaxis = "y2"
   )
 

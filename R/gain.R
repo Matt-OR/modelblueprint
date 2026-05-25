@@ -226,10 +226,9 @@ compute_cumulative <- function(dt, variable, obs, exposure) {
 plot_gain <- function(list_sets, scores, title, list_gini) {
   n <- length(scores)
   colors <- c(
-    "rgb(0,0,0)",
     "rgb(237,41,57)",
     RColorBrewer::brewer.pal(max(3L, n), "Paired")
-  )[seq_len(n + 1L)]
+  )[seq_len(n)]
 
   p <- plotly::plot_ly()
   p <- plotly::layout(
@@ -245,19 +244,29 @@ plot_gain <- function(list_sets, scores, title, list_gini) {
     margin = list(t = 25, b = 100, l = 50, r = 50)
   )
 
-  # Diagonal reference line (mean model)
   ref <- list_sets[[1L]]
   x_col <- names(ref)[1L]
+
+  # Diagonal reference line — mean model (y = x)
   p <- plotly::add_lines(
     p,
     x = ref[[x_col]],
     y = ref[[x_col]],
     name = "Mean model, Gini: 0.000",
-    line = list(color = colors[1L], dash = "dash")
+    line = list(color = "rgb(180,180,180)", dash = "dot", width = 1L)
   )
 
-  # One line per score — list_sets[[1]] is perfect model, [[2]] onward are scores
-  # scores here contains only the user-supplied pred names (not perfect_model)
+  # Perfect model curve — upper bound of what any model can achieve
+  gini_perfect <- as.numeric(list_gini[[1L]])
+  p <- plotly::add_lines(
+    p,
+    x = ref[[x_col]],
+    y = ref[[names(ref)[2L]]],
+    name = sprintf("Perfect model, Gini: %.3f", gini_perfect),
+    line = list(color = "rgb(0,0,0)", dash = "dash", width = 1L)
+  )
+
+  # One line per competing score
   for (i in seq_along(scores)) {
     s <- list_sets[[i + 1L]]
     x_col <- names(s)[1L]
@@ -268,7 +277,7 @@ plot_gain <- function(list_sets, scores, title, list_gini) {
       x = s[[x_col]],
       y = s[[y_col]],
       name = sprintf("%s, Gini: %.3f", scores[i], gini_i),
-      line = list(color = colors[i + 1L])
+      line = list(color = colors[i])
     )
   }
 

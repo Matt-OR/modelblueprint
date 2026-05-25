@@ -34,7 +34,7 @@ mb <- ModelBlueprint(
   deploy_notes       = "Logistic regression baseline"
 )
 
-mb
+print(mb)
 ```
 
 ## Predicting
