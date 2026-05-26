@@ -11,7 +11,7 @@ overlays the model's in-sample predictions to produce a lift chart (pass
 ``` r
 # S3 method for class 'ModelBlueprint'
 one_way(
-  object,
+  data,
   var,
   set = c("train", "test", "holdout"),
   predictions = FALSE,
@@ -25,7 +25,7 @@ one_way(
 
 ## Arguments
 
-- object:
+- data:
 
   A `ModelBlueprint`.
 

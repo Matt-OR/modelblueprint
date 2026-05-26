@@ -184,6 +184,10 @@ lift chart.
 ``` r
 
 one_way(mb, var = "wt")
+```
+
+``` r
+
 one_way(mb, var = "wt", predictions = TRUE)   # lift chart
 ```
 
@@ -205,12 +209,20 @@ pdp(mb, var = "wt", bins = 8L)
 
 # Gains chart with Gini coefficient
 gain(mb)
+```
+
+``` r
+
 
 # Predicted vs observed calibration
 pred_vs_obs(mb)
+```
+
+``` r
+
 
 # Grouped residuals with loess trend
-residuals_grouped(mb)
+residuals_grouped(mb, exposure_per_bin = 5)
 ```
 
 ## Pipe-friendly data manipulation
@@ -259,10 +271,12 @@ restores it exactly.
 ``` r
 
 saveMB(mb, path = tempdir(), filename = "logistic_vs")
+#> ModelBlueprint saved: /tmp/Rtmp6jxxDm/logistic_vs.tar.gz
 mb2 <- loadMB(file.path(tempdir(), "logistic_vs.tar.gz"))
 
 # Predictions are identical
 all.equal(predict(mb, mtcars), predict(mb2, mtcars))
+#> [1] TRUE
 ```
 
 ## Example blueprints
@@ -273,11 +287,23 @@ The package ships with example constructors for common model types:
 
 mb_lm  <- mb_lm_regression()
 mb_glm <- mb_glm_binomial()
+#> Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
 mb_rf  <- mb_rf_regression()     # requires randomForest
 mb_xgb <- mb_xgb_classification() # requires xgboost
+#> Warning in throw_err_or_depr_msg("Parameter(s) have been removed from this
+#> function: ", : Parameter(s) have been removed from this function: params. This
+#> warning will become an error in a future version.
 
 # All work with the same diagnostic functions
-one_way(mb_rf, var = "wt")
+one_way(mb_rf, var = "wt", predictions = TRUE)
+```
+
+``` r
+
 pdp(mb_xgb, var = "hp")
+```
+
+``` r
+
 gain(mb_glm)
 ```

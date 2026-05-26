@@ -7,6 +7,7 @@
 <url><loc>https://matt-or.github.io/modelblueprint/articles/partial-dependence-plots.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/authors.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/index.html</loc></url>
+<url><loc>https://matt-or.github.io/modelblueprint/reference/ModelBlueprint-package.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/reference/ModelBlueprint.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/reference/aggregate_one_way.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/reference/aggregate_pdp_oneway.html</loc></url>
@@ -34,7 +35,6 @@
 <url><loc>https://matt-or.github.io/modelblueprint/reference/plot_pdp.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/reference/pred_vs_obs.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/reference/predict.ModelBlueprint.html</loc></url>
-<url><loc>https://matt-or.github.io/modelblueprint/reference/print.ModelBlueprint.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/reference/residuals_grouped.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/reference/sami.html</loc></url>
 <url><loc>https://matt-or.github.io/modelblueprint/reference/saveMB.html</loc></url>

@@ -152,7 +152,7 @@ across the feature range. Better for visualising the shape of the
 relationship at the tails.</li>
 </ul>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/one_way.html">one_way</a></span><span class="op">(</span><span class="va">mb</span>, var <span class="op">=</span> <span class="st">"wt"</span>, type_agg <span class="op">=</span> <span class="st">"equal_range"</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/one_way.html">one_way</a></span><span class="op">(</span><span class="va">mb</span>, var <span class="op">=</span> <span class="st">"wt"</span>, type_agg <span class="op">=</span> <span class="st">"equal_range"</span>, bins <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="split-variable">Split variable<a class="anchor" aria-label="anchor" href="#split-variable"></a>
@@ -161,7 +161,7 @@ relationship at the tails.</li>
 producing one line per group. Useful for comparing behaviour across
 segments such as policy type, region, or claim flag.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="../reference/one_way.html">one_way</a></span><span class="op">(</span><span class="va">mb</span>, var <span class="op">=</span> <span class="st">"wt"</span>, split <span class="op">=</span> <span class="st">"am"</span><span class="op">)</span>   <span class="co"># split by transmission type</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/one_way.html">one_way</a></span><span class="op">(</span><span class="va">mb</span>, var <span class="op">=</span> <span class="st">"mpg"</span>, split <span class="op">=</span> <span class="st">"am"</span>, bins <span class="op">=</span> <span class="fl">5</span><span class="op">)</span>   <span class="co"># split by transmission type</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="choosing-the-dataset">Choosing the dataset<a class="anchor" aria-label="anchor" href="#choosing-the-dataset"></a>

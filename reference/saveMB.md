@@ -7,7 +7,7 @@ splits, pipeline functions, and metadata.
 ## Usage
 
 ``` r
-saveMB(object, ...)
+saveMB(object, path = getwd(), filename = NULL, ...)
 ```
 
 ## Arguments
@@ -16,10 +16,6 @@ saveMB(object, ...)
 
   A `ModelBlueprint` object.
 
-- ...:
-
-  Currently unused. Reserved for future subclass methods.
-
 - path:
 
   Directory to write the archive to. Default: working directory.
@@ -27,6 +23,10 @@ saveMB(object, ...)
 - filename:
 
   Optional filename. When `NULL`, `model_display_name` is used.
+
+- ...:
+
+  Currently unused. Reserved for future subclass methods.
 
 ## Value
 

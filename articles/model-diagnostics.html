@@ -111,6 +111,8 @@ summarises rank-ordering ability as a single number between -1 and 1 —
 higher is better.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">mb</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mb_examples.html">mb_glm_binomial</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="va">mtcars</span><span class="op">$</span><span class="va">pred_model1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">mb</span>, <span class="va">mtcars</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">mtcars</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">mtcars</span><span class="op">$</span><span class="va">pred_model2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">mb</span>, <span class="va">mtcars</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">mtcars</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Gains chart — Gini shown in legend</span></span>
 <span><span class="fu"><a href="../reference/gain.html">gain</a></span><span class="op">(</span><span class="va">mb</span><span class="op">)</span></span>
@@ -119,8 +121,7 @@ higher is better.</p>
 <span><span class="fu"><a href="../reference/gain.html">gain</a></span><span class="op">(</span></span>
 <span>  <span class="va">mtcars</span>,</span>
 <span>  pred     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pred_model1"</span>, <span class="st">"pred_model2"</span><span class="op">)</span>,</span>
-<span>  obs      <span class="op">=</span> <span class="st">"vs"</span>,</span>
-<span>  exposure <span class="op">=</span> <span class="st">"exposure"</span></span>
+<span>  obs      <span class="op">=</span> <span class="st">"vs"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <p><strong>When to use it:</strong> The gains chart is the primary
 performance metric in insurance pricing. A Gini above 0.3 is generally
@@ -138,7 +139,7 @@ observed are equal on average.</p>
 <code class="sourceCode R"><span><span class="va">mb</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mb_examples.html">mb_glm_binomial</a></span><span class="op">(</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># Calibration chart</span></span>
-<span><span class="fu"><a href="../reference/pred_vs_obs.html">pred_vs_obs</a></span><span class="op">(</span><span class="va">mb</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/pred_vs_obs.html">pred_vs_obs</a></span><span class="op">(</span><span class="va">mb</span>, ret <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># More bins for finer resolution</span></span>
 <span><span class="fu"><a href="../reference/pred_vs_obs.html">pred_vs_obs</a></span><span class="op">(</span><span class="va">mb</span>, bins <span class="op">=</span> <span class="fl">20L</span><span class="op">)</span></span>
@@ -209,11 +210,11 @@ region.</p>
 <p>On a plain data frame with predictions already attached:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">df</span>        <span class="op">&lt;-</span> <span class="va">mtcars</span></span>
-<span><span class="va">df</span><span class="op">$</span><span class="va">pred1</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">mb1</span>, <span class="va">mtcars</span><span class="op">)</span></span>
-<span><span class="va">df</span><span class="op">$</span><span class="va">pred2</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">mb2</span>, <span class="va">mtcars</span><span class="op">)</span></span>
+<span><span class="va">df</span><span class="op">$</span><span class="va">pred1</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">mb1</span>, <span class="va">mtcars</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">mtcars</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">df</span><span class="op">$</span><span class="va">pred2</span>  <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict</a></span><span class="op">(</span><span class="va">mb2</span>, <span class="va">mtcars</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">mtcars</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="../reference/sami.html">sami</a></span><span class="op">(</span><span class="va">df</span>, obs <span class="op">=</span> <span class="st">"mpg"</span>, pred <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"pred1"</span>, <span class="st">"pred2"</span><span class="op">)</span>,</span>
-<span>     exposure <span class="op">=</span> <span class="st">"exposure"</span>, bins <span class="op">=</span> <span class="fl">10L</span><span class="op">)</span></span></code></pre></div>
+<span>     exposure <span class="op">=</span> <span class="st">"exposure"</span>, bins <span class="op">=</span> <span class="fl">5</span>, recalib <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <p>With <code>recalib = TRUE</code>, both predictions are scaled to
 match the observed mean before computing ratios — this isolates shape
 differences from overall level differences.</p>

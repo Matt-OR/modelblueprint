@@ -88,7 +88,7 @@ one_way(mb, var = "wt", bins = 50L)
 
 ``` r
 
-one_way(mb, var = "wt", type_agg = "equal_range")
+one_way(mb, var = "wt", type_agg = "equal_range", bins = 5)
 ```
 
 ## Split variable
@@ -99,7 +99,7 @@ type, region, or claim flag.
 
 ``` r
 
-one_way(mb, var = "wt", split = "am")   # split by transmission type
+one_way(mb, var = "mpg", split = "am", bins = 5)   # split by transmission type
 ```
 
 ## Choosing the dataset

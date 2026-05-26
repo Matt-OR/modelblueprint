@@ -9,7 +9,7 @@ using the ModelBlueprint's model, target, exposure, and data slots.
 ``` r
 # S3 method for class 'ModelBlueprint'
 pdp(
-  object,
+  data,
   var,
   set = c("train", "test", "holdout"),
   bins = 10L,
@@ -22,7 +22,7 @@ pdp(
 
 ## Arguments
 
-- object:
+- data:
 
   A `ModelBlueprint`.
 
